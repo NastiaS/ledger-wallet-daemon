@@ -22,15 +22,16 @@ class TransactionsService @Inject()(defaultDaemonCache: DefaultDaemonCache) exte
   implicit val ec: ExecutionContext = MDCPropagatingExecutionContext.Implicits.global
 
   def createTransaction(transactionInfo: TransactionInfo, accountInfo: AccountInfo): Future[TransactionView] = {
-    defaultDaemonCache.getHardAccount(accountInfo.user.pubKey, accountInfo.poolName, accountInfo.walletName, accountInfo.index)
-      .flatMap { account =>
+
+    defaultDaemonCache.getHardAccount(accountInfo.user, accountInfo.poolName, accountInfo.walletName, accountInfo.index)
+      .flatMap { case (_, _, account) =>
         account.createTransaction(transactionInfo)
     }
   }
 
   def signTransaction(rawTx: Array[Byte], pairedSignatures: Seq[(Array[Byte],Array[Byte])], accountInfo: AccountInfo): Future[String] = {
-    defaultDaemonCache.getHardAccount(accountInfo.user.pubKey, accountInfo.poolName, accountInfo.walletName, accountInfo.index)
-      .flatMap { account =>
+    defaultDaemonCache.getHardAccount(accountInfo.user, accountInfo.poolName, accountInfo.walletName, accountInfo.index)
+      .flatMap { case (_, _, account) =>
         account.signTransaction(rawTx, pairedSignatures)
       }
   }

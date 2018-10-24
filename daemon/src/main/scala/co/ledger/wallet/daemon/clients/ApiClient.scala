@@ -45,7 +45,6 @@ class ApiClient(implicit val ec: ExecutionContext) {
       case "digibyte" => "/blockchain/v2/dgb/fees"
       case "bitcoin_cash" => "/blockchain/v2/abc/fees"
       case "poswallet" => "/blockchain/v2/posw/fees"
-      case "pivx" => "/blockchain/v2/pivx/fees"
       case "stratis" => "/blockchain/v2/strat/fees"
       case "peercoin" => "/blockchain/v2/ppc/fees"
       case "bitcoin_gold" => "/blockchain/v2/btg/fees"

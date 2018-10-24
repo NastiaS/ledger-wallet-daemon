@@ -71,8 +71,8 @@ class AccountTest extends AssertionsForJUnit {
     assert(emptyOp.isEmpty)
     val operations = Await.result(account0.operations(0, 1, 1), Duration.Inf)
     assert(1 === operations.size)
-    val headOp = Await.result(account0.operation(operations.head.uid, 1), Duration.Inf)
-    assert(headOp === Option(operations.head))
+    val headOp = Await.result(account0.operation(operations.head.getUid, 1), Duration.Inf)
+    assert(headOp.map(_.getUid) === Option(operations.head.getUid))
     assert(!freshAddresses.isEmpty)
   }
 }

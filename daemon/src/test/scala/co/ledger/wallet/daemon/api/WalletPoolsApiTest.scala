@@ -24,7 +24,7 @@ class WalletPoolsApiTest extends APIFeatureTest {
     createPool("your_pool")
     createPool("this_pool")
     val pools = parse[List[models.WalletPoolView]](getPools())
-    assert(pools == List(WalletPoolView("your_pool", 0), WalletPoolView("this_pool", 0)))
+    assert(pools == List(WalletPoolView("this_pool", 0), WalletPoolView("your_pool", 0)))
     deletePool("your_pool")
     deletePool("this_pool")
     val pools2 = parse[List[models.WalletPoolView]](getPools())

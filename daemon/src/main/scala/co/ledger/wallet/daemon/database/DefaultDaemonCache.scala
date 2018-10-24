@@ -2,17 +2,18 @@ package co.ledger.wallet.daemon.database
 
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import javax.inject.Singleton
 
 import co.ledger.wallet.daemon.async.MDCPropagatingExecutionContext
 import co.ledger.wallet.daemon.configurations.DaemonConfiguration
 import co.ledger.wallet.daemon.exceptions
 import co.ledger.wallet.daemon.exceptions.{AccountNotFoundException, UserNotFoundException, WalletPoolAlreadyExistException, WalletPoolNotFoundException}
 import co.ledger.wallet.daemon.models.Account.{Account, Derivation}
+import co.ledger.wallet.daemon.models.Operations.PackedOperationsView
 import co.ledger.wallet.daemon.models._
 import co.ledger.wallet.daemon.schedulers.observers.{NewOperationEventReceiver, SynchronizationResult}
 import co.ledger.wallet.daemon.services.LogMsgMaker
 import com.twitter.inject.Logging
+import javax.inject.Singleton
 import slick.jdbc.JdbcBackend.Database
 
 import scala.collection.JavaConverters._
@@ -57,8 +58,11 @@ class DefaultDaemonCache() extends DaemonCache with Logging {
     getHardWallet(pubKey, poolName, walletName).flatMap { wallet => wallet.accounts() }
   }
 
-  def getFreshAddresses(accountIndex: Int, pubKey: String, poolName: String, walletName: String): Future[Seq[String]] = {
-    getHardAccount(pubKey, poolName, walletName, accountIndex).flatMap { account => account.freshAddresses() }
+  def getFreshAddresses(accountIndex: Int, user: User, poolName: String, walletName: String): Future[Seq[String]] = {
+    for {
+      (_, _, account) <- getHardAccount(user, poolName, walletName, accountIndex)
+      addrs <- account.freshAddresses()
+    } yield addrs
   }
 
   def getDerivationPath(accountIndex: Int, pubKey: String, poolName: String, walletName: String): Future[String] = {
@@ -172,13 +176,12 @@ class DefaultDaemonCache() extends DaemonCache with Logging {
                                          walletName: String,
                                          previous: UUID,
                                          fullOp: Int): Future[PackedOperationsView] = {
-    getHardAccount(user.pubKey, poolName, walletName, accountIndex).flatMap { account =>
-      val previousRecord = opsCache.getPreviousOperationRecord(previous)
-      account.operations(previousRecord.offset(), previousRecord.batch, fullOp).flatMap { ops =>
-        Future.sequence(ops.map { op => op.operationView })
-          .map { os => PackedOperationsView(previousRecord.previous, previousRecord.next, os)}
-      }
-    }
+    for {
+      (_, wallet, account) <- getHardAccount(user, poolName, walletName, accountIndex)
+      previousRecord = opsCache.getPreviousOperationRecord(previous)
+      ops <- account.operations(previousRecord.offset(), previousRecord.batch, fullOp)
+      opsView <- Future.sequence(ops.map { op => Operations.getView(op, wallet, account)})
+    } yield PackedOperationsView(previousRecord.previous, previousRecord.next, opsView)
   }
 
   def getNextBatchAccountOperations(
@@ -188,51 +191,41 @@ class DefaultDaemonCache() extends DaemonCache with Logging {
                                      walletName: String,
                                      next: UUID,
                                      fullOp: Int): Future[PackedOperationsView] = {
-    getHardPool(user, poolName).flatMap { pool =>
-      getHardAccount(user.pubKey, poolName, walletName, accountIndex).flatMap { account =>
-        val candidate = opsCache.getOperationCandidate(next)
-        account.operations(candidate.offset(), candidate.batch, fullOp).flatMap { ops =>
-          val realBatch = if (ops.size < candidate.batch) ops.size else candidate.batch
-          val next = if (realBatch < candidate.batch) None else candidate.next
-          val previous = candidate.previous
-          val operationRecord = opsCache.insertOperation(candidate.id, pool.id, walletName, accountIndex, candidate.offset(), candidate.batch, next, previous)
-          Future.sequence(ops.map { op => op.operationView  })
-            .map { os => PackedOperationsView(operationRecord.previous, operationRecord.next, os)}
-        }
-      }
-    }
+    for {
+      (pool, wallet, account) <- getHardAccount(user, poolName, walletName, accountIndex)
+      candidate = opsCache.getOperationCandidate(next)
+      ops <- account.operations(candidate.offset(), candidate.batch, fullOp)
+      realBatch = if (ops.size < candidate.batch) ops.size else candidate.batch
+      next = if (realBatch < candidate.batch) None else candidate.next
+      previous = candidate.previous
+      operationRecord = opsCache.insertOperation(candidate.id, pool.id, walletName, accountIndex, candidate.offset(), candidate.batch, next, previous)
+      opsView <- Future.sequence(ops.map { op => Operations.getView(op, wallet, account)})
+    } yield PackedOperationsView(operationRecord.previous, operationRecord.next, opsView)
+  }
+
+  def getHardAccount(user: User, poolName: String, walletName: String, accountIndex: Int): Future[(Pool, Wallet, Account)] = {
+    for {
+      poolOpt <- user.pool(poolName)
+      pool = poolOpt.getOrElse(throw exceptions.WalletPoolNotFoundException(poolName))
+      walletOpt <- pool.wallet(walletName)
+      wallet = walletOpt.getOrElse(throw exceptions.WalletNotFoundException(walletName))
+      accountOpt <- wallet.account(accountIndex)
+      account = accountOpt.getOrElse(throw exceptions.AccountNotFoundException(accountIndex))
+    } yield (pool, wallet, account)
   }
 
   def getAccountOperations(user: User, accountIndex: Int, poolName: String, walletName: String, batch: Int, fullOp: Int): Future[PackedOperationsView] = {
-    getHardPool(user, poolName).flatMap { pool =>
-      getHardAccount(user.pubKey, poolName, walletName, accountIndex).flatMap { account =>
-        val offset = 0
-        account.operations(offset, batch, fullOp).flatMap { ops =>
-          val realBatch = if (ops.size < batch) ops.size else batch
-          val next = if (realBatch < batch) None else Option(UUID.randomUUID())
-          val previous = None
-          val operationRecord = opsCache.insertOperation(UUID.randomUUID(), pool.id, walletName, accountIndex, offset, batch, next, previous)
-          Future.sequence(ops.map { op => op.operationView })
-            .map { os => PackedOperationsView(operationRecord.previous, operationRecord.next, os) }
-        }
-      }
-    }
+    for {
+      (pool, wallet, account) <- getHardAccount(user, poolName, walletName, accountIndex)
+      offset = 0
+      ops <- account.operations(offset, batch, fullOp)
+      realBatch = if (ops.size < batch) ops.size else batch
+      next = if (realBatch < batch) None else Option(UUID.randomUUID())
+      previous = None
+      operationRecord = opsCache.insertOperation(UUID.randomUUID(), pool.id, walletName, accountIndex, offset, batch, next, previous)
+      opsView <- Future.sequence(ops.map {op => Operations.getView(op, wallet, account)})
+    } yield PackedOperationsView(operationRecord.previous, operationRecord.next, opsView)
   }
-
-  def getAccountOperation(user: User, uid: String, accountIndex: Int, poolName: String, walletName: String, fullOp: Int): Future[Option[Operation]] = {
-    getHardAccount(user.pubKey, poolName, walletName, accountIndex).flatMap { account => account.operation(uid, fullOp) }
-  }
-
-  def getHardAccount(pubKey: String, poolName: String, walletName: String, accountIndex: Int): Future[Account] = {
-    getHardWallet(pubKey, poolName, walletName).flatMap { wallet =>
-      wallet.account(accountIndex).map { aO => aO.getOrElse(throw AccountNotFoundException(accountIndex)) }
-    }
-  }
-
-  private def getHardPool(user: User, poolName: String): Future[Pool] = {
-    user.pool(poolName).map { pO => pO.getOrElse(throw WalletPoolNotFoundException(poolName)) }
-  }
-
 }
 
 object DefaultDaemonCache extends Logging {

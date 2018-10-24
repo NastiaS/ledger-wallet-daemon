@@ -25,3 +25,4 @@ daemon/project
 
 # conf file as it is sample now
 daemon/src/main/resources/*.conf
+core_data/

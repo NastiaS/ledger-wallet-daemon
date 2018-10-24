@@ -85,25 +85,22 @@ object Account {
         } else throw new UnsupportedOperationException("Account type not supported, can't create transaction")
     }
 
-    def operation(uid: String, fullOp: Int): Future[Option[Operation]] = {
+    def operation(uid: String, fullOp: Int): Future[Option[core.Operation]] = {
       val queryOperations = coreA.queryOperations()
       queryOperations.filter().opAnd(core.QueryFilter.operationUidEq(uid))
       (if (fullOp > 0) {
         queryOperations.complete().execute()
       } else { queryOperations.partial().execute() }).map { operations =>
-        operations.asScala.headOption.map { o => Operation.newInstance(o, self, wallet)}
+        debug(s"${operations.size()} returned with uid $uid")
+        operations.asScala.headOption }
       }
-    }
 
-    def operations(offset: Long, batch: Int, fullOp: Int): Future[Seq[Operation]] = {
+    def operations(offset: Long, batch: Int, fullOp: Int): Future[Seq[core.Operation]] = {
       (if (fullOp > 0) {
         coreA.queryOperations().addOrder(OperationOrderKey.DATE, true).offset(offset).limit(batch).complete().execute()
       } else {
         coreA.queryOperations().addOrder(OperationOrderKey.DATE, true).offset(offset).limit(batch).partial().execute()
-      }).map { operations =>
-        if (operations.size() <= 0) { List[Operation]() }
-        else { operations.asScala.map { o => Operation.newInstance(o, self, wallet)} }
-      }
+      }).map { operations => operations.asScala.toList }
     }
 
     def operationCounts: Future[Map[core.OperationType, Int]] =

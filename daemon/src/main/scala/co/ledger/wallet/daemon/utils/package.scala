@@ -41,4 +41,10 @@ package object utils {
   def newConcurrentSet[T]: mutable.Set[T] = {
     java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap[T, java.lang.Boolean]()).asScala
   }
+
+  def optionSequence[T](input: Option[ScalaFuture[T]])(implicit ec: ExecutionContext): ScalaFuture[Option[T]] = input match {
+    case None => ScalaFuture(Option.empty[T])
+    case Some(in) => in.map ( t => Some(t))
+  }
+
 }
