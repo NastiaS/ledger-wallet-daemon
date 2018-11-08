@@ -5,6 +5,7 @@ import java.util.UUID
 import co.ledger.wallet.daemon.async.MDCPropagatingExecutionContext
 import co.ledger.wallet.daemon.database.DaemonCache
 import co.ledger.wallet.daemon.database.DefaultDaemonCache.User
+import co.ledger.wallet.daemon.exceptions.AccountNotFoundException
 import co.ledger.wallet.daemon.models.Account.Account
 import co.ledger.wallet.daemon.models._
 import co.ledger.wallet.daemon.schedulers.observers.SynchronizationResult
@@ -71,6 +72,17 @@ class AccountsService @Inject()(defaultDaemonCache: DaemonCache) extends DaemonS
       info(LogMsgMaker.newInstance("Retrieve previous operations").toString())
       defaultDaemonCache.getPreviousBatchAccountOperations(user, accountIndex, poolName, walletName, queryParams.previous.get, queryParams.fullOp)
     }
+  }
+
+  def firstOperation(user: User, accountIndex: Int, poolName: String, walletName: String): Future[Option[OperationView]] = {
+    (for {
+      accountOpt <- defaultDaemonCache.getAccount(accountIndex, user.pubKey, poolName, walletName)
+      account = accountOpt.getOrElse(throw AccountNotFoundException(accountIndex))
+      opt <- account.firstOperation
+    } yield opt match {
+      case None => Future(None)
+      case Some(o) => o.operationView.map(Some(_))
+    }).flatten
   }
 
   def accountOperation(user: User, uid: String, accountIndex: Int, poolName: String, walletName: String, fullOp: Int): Future[Option[OperationView]] = {

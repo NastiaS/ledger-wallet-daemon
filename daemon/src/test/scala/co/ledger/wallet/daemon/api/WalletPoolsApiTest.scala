@@ -21,13 +21,14 @@ class WalletPoolsApiTest extends APIFeatureTest {
   }
 
   test("WalletPoolsApi#Create and list multiple pool") {
-    createPool("your_pool")
     createPool("this_pool")
+    createPool("your_pool")
     val pools = parse[List[models.WalletPoolView]](getPools())
     assert(pools == List(WalletPoolView("your_pool", 0), WalletPoolView("this_pool", 0)))
     deletePool("your_pool")
     deletePool("this_pool")
     val pools2 = parse[List[models.WalletPoolView]](getPools())
+    
     assert(pools2.size == 0)
   }
 

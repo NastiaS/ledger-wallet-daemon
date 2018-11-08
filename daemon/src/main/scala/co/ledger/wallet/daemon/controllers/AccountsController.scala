@@ -166,12 +166,15 @@ class AccountsController @Inject()(accountsService: AccountsService) extends Con
   }
 
   /**
-    * End point queries for operation view with specified uid.
+    * End point queries for operation view with specified uid, return the first operation of this account if uid is 'first'.
     *
     */
   get("/pools/:pool_name/wallets/:wallet_name/accounts/:account_index/operations/:uid") { request: OperationResult =>
     info(s"GET account operation $request")
-    accountsService.accountOperation(request.user, request.uid, request.account_index, request.pool_name, request.wallet_name, request.full_op).map {
+    (request.uid match {
+      case "first" => accountsService.firstOperation(request.user, request.account_index, request.pool_name, request.wallet_name)
+      case _ => accountsService.accountOperation(request.user, request.uid, request.account_index, request.pool_name, request.wallet_name, request.full_op)
+    }).map {
       case Some(view) => responseSerializer.serializeOk(view, response)
       case None => responseSerializer.serializeNotFound(Map("response" -> "Account operation doesn't exist", "uid" -> request.uid), response)
     }.recover {

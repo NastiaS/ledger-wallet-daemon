@@ -106,6 +106,11 @@ object Account {
       }
     }
 
+    def firstOperation: Future[Option[Operation]] = {
+      coreA.queryOperations().addOrder(OperationOrderKey.DATE, false).limit(1).partial().execute()
+        .map { ops => ops.asScala.toList.headOption.map { o => Operation.newInstance(o, self, wallet)} }
+    }
+
     def operationCounts: Future[Map[core.OperationType, Int]] =
       coreA.queryOperations().addOrder(OperationOrderKey.DATE, true).partial().execute().map { operations =>
         operations.asScala.toList.groupBy(op => op.getOperationType).map { case (optType, opts) => (optType, opts.size)}

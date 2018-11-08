@@ -141,6 +141,8 @@ class AccountsApiTest extends APIFeatureTest {
     assertSyncPool(Status.Ok)
     assertGetAccountOp("op_pool", "op_wallet", 0, "noexistop", 0, Status.NotFound)
     assertGetAccountOp("op_pool", "op_wallet", 0, "bcbe563a94e70a6fe0a190d6578f5440615eb64bbd6c49b2a6b77eb9ba01963a", 0, Status.Ok)
+    val response = assertGetFirstOperation(0,"op_pool", "op_wallet", Status.Ok).contentString
+    assert(response.contains("ed977add08cfc6cd158e65150bcd646d7a52b60f84e15e424b617d5511aaed21"))
 
     val firstBtch = parse[Map[String, Any]](assertGetAccountOps("op_pool", "op_wallet", 0, OperationQueryParams(None, None, 2, 0), Status.Ok))
 
@@ -203,6 +205,10 @@ class AccountsApiTest extends APIFeatureTest {
       case None => server.httpGet(s"/pools/$poolName/wallets/$walletName/accounts", headers = defaultHeaders, andExpect = expected)
       case Some(i) => server.httpGet(s"/pools/$poolName/wallets/$walletName/accounts/$i", headers = defaultHeaders, andExpect = expected)
     }
+  }
+
+  private def assertGetFirstOperation(index: Int, poolName: String, walletName: String, expected: Status): Response = {
+    server.httpGet(s"/pools/$poolName/wallets/$walletName/accounts/$index/operations/first", headers = defaultHeaders, andExpect = expected)
   }
 
   private def assertGetAccountCreationInfo(poolName: String, walletName: String, index: Option[Int], expected: Status): Response = {
