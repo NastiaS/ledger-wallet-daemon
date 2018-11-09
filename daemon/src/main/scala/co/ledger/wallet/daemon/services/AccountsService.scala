@@ -2,7 +2,6 @@ package co.ledger.wallet.daemon.services
 
 import java.util.UUID
 
-import co.ledger.core.implicits.{AccountNotFoundException, WalletNotFoundException}
 import co.ledger.wallet.daemon.async.MDCPropagatingExecutionContext
 import co.ledger.wallet.daemon.database.DaemonCache
 import co.ledger.wallet.daemon.database.DefaultDaemonCache.User
@@ -10,7 +9,6 @@ import co.ledger.wallet.daemon.models.Account.Account
 import co.ledger.wallet.daemon.models.Operations.{OperationView, PackedOperationsView}
 import co.ledger.wallet.daemon.models._
 import co.ledger.wallet.daemon.schedulers.observers.SynchronizationResult
-import co.ledger.wallet.daemon.utils
 import javax.inject.{Inject, Singleton}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -77,15 +75,7 @@ class AccountsService @Inject()(defaultDaemonCache: DaemonCache) extends DaemonS
   }
 
   def accountOperation(user: User, uid: String, accountIndex: Int, poolName: String, walletName: String, fullOp: Int): Future[Option[OperationView]] = {
-    (for {
-      walletOpt <- defaultDaemonCache.getWallet(walletName, poolName, user.pubKey)
-      wallet = walletOpt.getOrElse(throw new WalletNotFoundException(s"Wallet '$walletName' not found"))
-      accountOpt <- wallet.account(accountIndex)
-      account = accountOpt.getOrElse(throw new AccountNotFoundException(s"Account '$accountIndex' not found"))
-      operation <- account.operation(uid, fullOp)
-    } yield {
-      utils.optionSequence(operation.map { op => Operations.getView(op, wallet, account) })
-    }).flatten
+    defaultDaemonCache.getAccountOperation(user, uid, accountIndex, poolName, walletName, fullOp)
   }
 
   def createAccount(accountCreationBody: AccountDerivationView, user: User, poolName: String, walletName: String): Future[AccountView] = {

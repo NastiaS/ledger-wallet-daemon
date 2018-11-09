@@ -8,7 +8,7 @@ import co.ledger.wallet.daemon.configurations.DaemonConfiguration
 import co.ledger.wallet.daemon.exceptions
 import co.ledger.wallet.daemon.exceptions.{AccountNotFoundException, UserNotFoundException, WalletPoolAlreadyExistException, WalletPoolNotFoundException}
 import co.ledger.wallet.daemon.models.Account.{Account, Derivation}
-import co.ledger.wallet.daemon.models.Operations.PackedOperationsView
+import co.ledger.wallet.daemon.models.Operations.{OperationView, PackedOperationsView}
 import co.ledger.wallet.daemon.models._
 import co.ledger.wallet.daemon.schedulers.observers.{NewOperationEventReceiver, SynchronizationResult}
 import co.ledger.wallet.daemon.services.LogMsgMaker
@@ -206,12 +206,23 @@ class DefaultDaemonCache() extends DaemonCache with Logging {
   def getHardAccount(user: User, poolName: String, walletName: String, accountIndex: Int): Future[(Pool, Wallet, Account)] = {
     for {
       poolOpt <- user.pool(poolName)
-      pool = poolOpt.getOrElse(throw exceptions.WalletPoolNotFoundException(poolName))
+      pool <- poolOpt.fold[Future[Pool]](Future.failed(exceptions.WalletPoolNotFoundException(poolName)))(Future.successful)
       walletOpt <- pool.wallet(walletName)
-      wallet = walletOpt.getOrElse(throw exceptions.WalletNotFoundException(walletName))
+      wallet <- walletOpt.fold[Future[Wallet]](Future.failed(exceptions.WalletNotFoundException(walletName)))(Future.successful)
       accountOpt <- wallet.account(accountIndex)
-      account = accountOpt.getOrElse(throw exceptions.AccountNotFoundException(accountIndex))
+      account <- accountOpt.fold[Future[Account]](Future.failed(exceptions.AccountNotFoundException(accountIndex)))(Future.successful)
     } yield (pool, wallet, account)
+  }
+
+  def getAccountOperation(user: User, uid: String, accountIndex: Int, poolName: String, walletName: String, fullOp: Int): Future[Option[OperationView]] = {
+    for {
+      (_, wallet, account) <- getHardAccount(user, poolName, walletName, accountIndex)
+      operationOpt <- account.operation(uid, fullOp)
+      op <- operationOpt match {
+        case None => Future(None)
+        case Some(op) => Operations.getView(op, wallet, account).map(Some(_))
+      }
+    } yield op
   }
 
   def getAccountOperations(user: User, accountIndex: Int, poolName: String, walletName: String, batch: Int, fullOp: Int): Future[PackedOperationsView] = {
