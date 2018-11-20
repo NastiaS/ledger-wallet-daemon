@@ -15,7 +15,7 @@ echo "Updating libraries"
 mkdir -p $pkg_dir/resources/djinni_native_libs/
 
 # Copy osx and linux libs
-# cp $build_dir/core/src/libledger-core.so $pkg_dir/resources/djinni_native_libs/libledger-core.so
+cp $build_dir/core/src/libledger-core.so $pkg_dir/resources/djinni_native_libs/libledger-core.so
 cp $build_dir/core/src/libledger-core.dylib $pkg_dir/resources/djinni_native_libs/libledger-core.dylib
 
 # Build the actual jar
